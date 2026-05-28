@@ -150,6 +150,7 @@ activemq-data/
 # Environments
 .env
 .envrc
+digit-recog-env/
 .venv
 env/
 venv/
