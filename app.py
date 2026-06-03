@@ -2,41 +2,46 @@ import pygame
 import numpy as np
 import tensorflow as tf
 
-# 1. Load the model
+# Load the model
 model = tf.keras.models.load_model('mnist_model.keras')
 
 pygame.init()
-WIDTH, HEIGHT = 280, 320 # Increased height to give text its own safe space
+CANVAS_SIZE = 360
+UI_BOTTOM_SPACE = 70
+BRUSH_SIZE = 12
+PAD_X, PAD_Y = 10, 10      # Padding to center the canvas
+WIDTH = CANVAS_SIZE + (PAD_X * 2)
+HEIGHT = CANVAS_SIZE + (PAD_Y * 2) + UI_BOTTOM_SPACE
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Digit Recognizer MVP")
+pygame.display.set_caption("Recognizer MVP")
 font = pygame.font.Font(None, 36)
 
-# Colors
-BLACK, WHITE, GREEN = (0, 0, 0), (255, 255, 255), (0, 255, 0)
-BRUSH_SIZE = 12
+# Theme colors
+BLACK = (0, 0, 0)          # MUST KEEP: Data Layer Background
+WHITE = (255, 255, 255)    # MUST KEEP: Data Layer Brush
+DARK_BLUE = (15, 23, 42)   # UI Layer: App Background
+CYAN = (56, 189, 248)      # UI Layer: Prediction Text
+BORDER = (51, 65, 85)      # UI Layer: Canvas Border
 
-# 2. SEPARATE UI FROM DATA: Create a dedicated drawing canvas
-canvas = pygame.Surface((280, 280))
+
+# The data layer
+canvas = pygame.Surface((CANVAS_SIZE, CANVAS_SIZE)) 
 canvas.fill(BLACK)
 
 def predict_digit(surface):
-    # Capture ONLY the dedicated drawing canvas
+    # Capture ONLY the black-and-white canvas
     img = pygame.surfarray.array3d(surface)
     img = np.mean(img, axis=2)
     img = np.rot90(img, -1)
     img = np.fliplr(img)
     
-    # 3. BOUNDING BOX & CENTERING LOGIC (The Secret Sauce)
-    coords = np.argwhere(img > 0) # Find all pixels you drew
+    # Bounding Box & Centering
+    coords = np.argwhere(img > 0)
     if len(coords) > 0:
-        # Get the edges of your drawing
         y_min, x_min = coords.min(axis=0)
         y_max, x_max = coords.max(axis=0)
-        
-        # Crop the image tight around the drawing
         cropped = img[y_min:y_max+1, x_min:x_max+1]
         
-        # Make the cropped area a perfect square to prevent stretching
         h, w = cropped.shape
         size = max(h, w)
         square = np.zeros((size, size))
@@ -44,7 +49,6 @@ def predict_digit(surface):
         x_off = (size - w) // 2
         square[y_off:y_off+h, x_off:x_off+w] = cropped
         
-        # Resize to exactly 20x20, then pad with 4 pixels to make it 28x28
         resized = tf.image.resize(np.expand_dims(square, axis=-1), [20, 20])
         padded = tf.pad(resized, [[4, 4], [4, 4], [0, 0]])
         img = np.squeeze(padded) / 255.0
@@ -63,14 +67,15 @@ while running:
             running = False
             
         if event.type == pygame.MOUSEBUTTONDOWN:
-            # Only draw if clicking inside the canvas area
-            if pygame.mouse.get_pos()[1] < 280:
+            # Check if click is inside the canvas boundaries
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            if PAD_X <= mouse_x <= PAD_X + CANVAS_SIZE and PAD_Y <= mouse_y <= PAD_Y + CANVAS_SIZE:
                 drawing = True
             
         if event.type == pygame.MOUSEBUTTONUP:
             if drawing:
                 drawing = False
-                current_prediction = predict_digit(canvas) # Pass canvas, NOT screen!
+                current_prediction = predict_digit(canvas)
             
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_c:
@@ -78,18 +83,26 @@ while running:
                 current_prediction = None
 
     if drawing:
-        mouse_pos = pygame.mouse.get_pos()
-        # Draw on the CANVAS, not the screen
-        pygame.draw.circle(canvas, WHITE, mouse_pos, BRUSH_SIZE)
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        # Adjust mouse coordinates relative to the canvas position
+        canvas_x = mouse_x - PAD_X
+        canvas_y = mouse_y - PAD_Y
+        pygame.draw.circle(canvas, WHITE, (canvas_x, canvas_y), BRUSH_SIZE)
 
-    # Render loop
-    screen.fill(BLACK)
-    screen.blit(canvas, (0, 0)) # Paste the pure canvas onto the top of the screen
+    # Applying the Theme
+    screen.fill(DARK_BLUE)
     
-    # Draw UI text at the bottom, safely isolated from the model's eyes
+    # Draw a subtle border around where the canvas will go
+    pygame.draw.rect(screen, BORDER, (PAD_X - 2, PAD_Y - 2, CANVAS_SIZE + 4, CANVAS_SIZE + 4), 2)
+    
+    # Paste the pure Black & White canvas onto our Dark Blue screen
+    screen.blit(canvas, (PAD_X, PAD_Y)) 
+    
+    # Render Text
     if current_prediction is not None:
-        text = font.render(f"Prediction: {current_prediction}", True, GREEN)
-        screen.blit(text, (10, 285))
+        text = font.render(f"Prediction: {current_prediction}", True, CYAN)
+        screen.blit(text, (PAD_X, PAD_Y + CANVAS_SIZE + 15))
+        
 
     pygame.display.flip()
 
